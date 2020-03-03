@@ -4,46 +4,49 @@
 
 import 'dart:io';
 
-var preview_server_port = 2227;
+var preview_server_port = 89757;
 
+// 扫描pubspec的每一行，根据assets配置，更新该文件内容
 void main() async {
   bool working = false;
   var pubSpec = new File('pubspec.yaml');
   var pubLines = pubSpec.readAsLinesSync();
   var newLines = <String>[];
   var resource = <String>[];
+  var paths = <String>[];
   for (var line in pubLines) {
-    if (line.contains('begin') && line.contains('#') && line.contains('assets')) {
+    if (line.contains('begin') &&
+        line.contains('#') &&
+        line.contains('assets')) {
       working = true;
       newLines.add(line);
     }
-    if (line.contains('end') && line.contains('#') && line.contains('assets')) working = false;
+    if (line.contains('end') && line.contains('#') && line.contains('assets'))
+      working = false;
 
     if (working) {
+      // 固定配置的需要扫描的文件夹
       if (line.trim().startsWith('#') && line.trim().endsWith('*')) {
         newLines.add(line);
-        var directory = new Directory(line.replaceAll('#', '').replaceAll('*', '').trim());
+        var directory =
+            new Directory(line.replaceAll('#', '').replaceAll('*', '').trim());
         if (directory.existsSync()) {
           var list = directory.listSync(recursive: true);
           for (var file in list) {
-            if (new File(file.path)
-                .statSync()
-                .type == FileSystemEntityType.file) {
+            if (new File(file.path).statSync().type ==
+                FileSystemEntityType.file) {
               var path = file.path.replaceAll('\\', '/');
-              var varName = path.replaceAll('/', '_').replaceAll('.', '_').toLowerCase();
-              var pos = 0;
-              String char;
-              while (true) {
-                pos = varName.indexOf('_', pos);
-                if (pos == -1) break;
-                char = varName.substring(pos + 1, pos + 2);
-                varName = varName.replaceFirst('_$char', '_${char.toUpperCase()}');
-                pos++;
+              // 获取文件名称
+              var fileName = path.split("/").last;
+              path = directory.path + fileName;
+              var varName = fileName.split(".").first;
+              if (!paths.contains(path)) {
+                paths.add(path);
+                resource.add(
+                    "/// ![](http://127.0.0.1:$preview_server_port/$path)");
+                resource.add("static final String $varName = '$path';");
+                newLines.add('    - $path');
               }
-              varName = varName.replaceAll('_', '');
-              resource.add("/// ![](http://127.0.0.1:$preview_server_port/$path)");
-              resource.add("static final String $varName = '$path';");
-              newLines.add('    - $path');
             }
           }
         } else {
@@ -55,7 +58,7 @@ void main() async {
     }
   }
 
-  var r = new File('lib/r.dart');
+  var r = new File('lib/R.dart');
   if (r.existsSync()) {
     r.deleteSync();
   }
@@ -78,7 +81,7 @@ void main() async {
     ser = await HttpServer.bind('127.0.0.1', preview_server_port);
     print('成功启动图片预览服务器于本机<$preview_server_port>端口');
     ser.listen(
-          (req) {
+      (req) {
         var index = req.uri.path.lastIndexOf('.');
         var subType = req.uri.path.substring(index);
         req.response
